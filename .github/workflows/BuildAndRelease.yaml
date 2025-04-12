@@ -13,58 +13,65 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest
-
+    strategy:
+      matrix:
+        configuration: [Release]
+        platform: [x64]
+    runs-on: windows-2022
+    env:
+      Solution_Path: MsiGpuModeDriver.sln  # Replace with your solution path
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
+      - name: Check out repository code
+        uses: actions/checkout@v4
 
-    - name: Set up WDK
-      uses: microsoft/windows-driver-kit@v1
-      with:
-        version: '10.0.22621.0'  # Adjust to your WDK version
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v1.0.2
 
-    - name: Build driver
-      run: |
-        msbuild GpuModeDriver.sln /p:Configuration=Debug /p:Platform=x64
+      - name: Restore NuGet Packages
+        run: nuget restore ${{ env.Solution_Path }}
 
-    - name: Create artifacts
-      run: |
-        Compress-Archive -Path "x64\Debug\GpuModeDriver.sys", "x64\Debug\GpuModeDriver.inf" -DestinationPath "GpuModeDriver.zip"
+      - name: Build solution
+        run: |
+          msbuild ${{ env.Solution_Path }} -p:Configuration=${{ matrix.configuration }} -p:Platform=${{ matrix.platform }}
 
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v2
-      with:
-        name: GpuModeDriver
-        path: GpuModeDriver.zip
+      - name: Package artifacts
+        run: |
+          Compress-Archive -Path "x64\Release\*" -DestinationPath "driver-${{ matrix.configuration }}-${{ matrix.platform }}.zip"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: driver-${{ matrix.configuration }}-${{ matrix.platform }}
+          path: driver-${{ matrix.configuration }}-${{ matrix.platform }}.zip
 
   release:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: windows-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
     steps:
-    - name: Download artifacts
-      uses: actions/download-artifact@v2
-      with:
-        name: GpuModeDriver
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: driver-Release-x64
+          path: driver-Release-x64.zip
 
-    - name: Create release
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ github.ref }}
-        release_name: Release ${{ github.ref }}
-        draft: false
-        prerelease: false
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
 
-    - name: Upload release asset
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: GpuModeDriver.zip
-        asset_name: GpuModeDriver.zip
-        asset_content_type: application/zip
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: driver-Release-x64.zip
+          asset_name: driver-Release-x64.zip
+          asset_content_type: application/zip
