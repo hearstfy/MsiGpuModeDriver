@@ -1,0 +1,25 @@
+#ifndef _GPUMODEDRIVER_H_
+#define _GPUMODEDRIVER_H_
+
+#include <wdm.h>
+#include <wdf.h>
+
+#define IOCTL_SET_GPU_MODE CTL_CODE(FILE_DEVICE_UNKNOWN, 0x800, METHOD_BUFFERED, FILE_WRITE_ACCESS)
+#define IOCTL_GET_GPU_MODE CTL_CODE(FILE_DEVICE_UNKNOWN, 0x801, METHOD_BUFFERED, FILE_READ_ACCESS)
+
+#define GPU_MODE_INTEGRATED 0
+#define GPU_MODE_DISCRETE  1
+
+typedef struct _DEVICE_CONTEXT {
+    WDFDEVICE Device;
+    ULONG CurrentGpuMode;
+    WDFSPINLOCK Lock;
+} DEVICE_CONTEXT, * PDEVICE_CONTEXT;
+
+WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(DEVICE_CONTEXT, GetDeviceContext)
+
+NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath);
+NTSTATUS EvtDeviceAdd(WDFDRIVER Driver, PWDFDEVICE_INIT DeviceInit);
+VOID EvtIoDeviceControl(WDFQUEUE Queue, WDFREQUEST Request, size_t OutputBufferLength, size_t InputBufferLength, ULONG IoControlCode);
+
+#endif
